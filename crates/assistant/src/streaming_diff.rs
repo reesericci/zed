@@ -109,24 +109,37 @@ impl LineBasedStreamingDiff {
                     let old_line_len = old_line.len();
 
                     if old_line.as_str() == new_line {
-                        hunks.push(Hunk::Remove {
-                            len: mem::take(&mut self.remove_len),
-                        });
-                        hunks.push(Hunk::Insert {
-                            text: mem::take(&mut self.text_to_insert),
-                        });
+                        if self.remove_len > 0 {
+                            hunks.push(Hunk::Remove {
+                                len: mem::take(&mut self.remove_len),
+                            });
+                        }
+
+                        if self.new_line_ix > 0 || self.old_line_ix > 0 {
+                            self.text_to_insert.push('\n');
+                        }
+                        if !self.text_to_insert.is_empty() {
+                            hunks.push(Hunk::Insert {
+                                text: mem::take(&mut self.text_to_insert),
+                            });
+                        }
+
                         hunks.push(Hunk::Keep { len: new_line_len });
                     } else {
                         self.remove_len += old_line_len + 1;
+                        if self.new_line_ix > 0 || self.old_line_ix > 0 {
+                            self.text_to_insert.push('\n');
+                        }
                         self.text_to_insert.push_str(new_line);
-                        self.text_to_insert.push('\n');
                     }
 
                     self.old_line_ix += 1;
                 }
                 None => {
+                    if self.new_line_ix > 0 || self.old_line_ix > 0 {
+                        self.text_to_insert.push('\n');
+                    }
                     self.text_to_insert.push_str(new_line);
-                    self.text_to_insert.push('\n');
                 }
             }
 
@@ -144,8 +157,13 @@ impl LineBasedStreamingDiff {
                 len: self.remove_len + self.old_lines[self.old_line_ix..].len(),
             });
         }
-
-        self.text_to_insert.push_str(&self.new[self.new_line_ix..]);
+        let remaining_new_line = &self.new[self.new_line_ix..];
+        if self.new_line_ix <= self.new.len() {
+            if self.new_line_ix > 0 || self.old_line_ix > 0 {
+                self.text_to_insert.push('\n');
+            }
+            self.text_to_insert.push_str(remaining_new_line);
+        }
         if !self.text_to_insert.is_empty() {
             hunks.push(Hunk::Insert {
                 text: self.text_to_insert,
@@ -424,7 +442,7 @@ mod tests {
                     old_ix += len;
                 }
                 Hunk::Insert { text } => {
-                    assert_eq!(text, &new[new_ix..new_ix + text.len()]);
+                    assert_eq!(text, &new[new_ix..new_ix + text.len()],);
                     patched.push_str(&text);
                     new_ix += text.len();
                 }
