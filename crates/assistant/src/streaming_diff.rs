@@ -152,9 +152,14 @@ impl LineBasedStreamingDiff {
     pub fn finish(mut self) -> Vec<Hunk> {
         let mut hunks = Vec::new();
 
-        if self.remove_len > 0 {
+        if self.remove_len > 0 || self.old_line_ix < self.old_lines.len() {
             hunks.push(Hunk::Remove {
-                len: self.remove_len + self.old_lines[self.old_line_ix..].len(),
+                len: self.remove_len
+                    + self.old_lines[self.old_line_ix..]
+                        .iter()
+                        .map(|line| line.len() + 1)
+                        .sum::<usize>()
+                        .saturating_sub(1),
             });
         }
         let remaining_new_line = &self.new[self.new_line_ix..];
